@@ -1,32 +1,19 @@
-name: CI
-
+name: release-ready
 on:
-  push:
-    branches: ["**"]
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
 
 jobs:
-  build-and-check:
+  notify-release-ready:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Let ReleaseReady orchestrate execution
+        run: |
+          curl -X POST "https://app.releaseready.dev/api/webhooks/github?projectId=cmmn4tloz0001l404xheadfr0"             -H "X-Hub-Signature-256:74f2ced00704de131c2fab96c87b4957a5ca8b34a8d60fc95fe3e13eb322e5ee"             -H "Content-Type: application/json"             --data @github-event.json
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Lint
-        run: npm run lint
-
-      - name: Typecheck
-        run: npm run typecheck
-
-      - name: Build
-        run: npm run build
+# ReleaseReady handles:
+# - project mapping
+# - trigger orchestration
+# - delegated runner execution or direct execution
+# - result ingestion
+# - checklist run visibility
