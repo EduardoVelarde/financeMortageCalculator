@@ -9,7 +9,8 @@ jobs:
     steps:
       - name: Let ReleaseReady orchestrate execution
         run: |
-          curl -X POST "https://app.releaseready.dev/api/webhooks/github?projectId=cmmn4tloz0001l404xheadfr0"             -H "X-Hub-Signature-256:74f2ced00704de131c2fab96c87b4957a5ca8b34a8d60fc95fe3e13eb322e5ee"             -H "Content-Type: application/json"             --data-binary "@$GITHUB_EVENT_PATH"
+          RELEASEREADY_SIGNATURE="sha256=$(openssl dgst -sha256 -hmac "74f2ced00704de131c2fab96c87b4957a5ca8b34a8d60fc95fe3e13eb322e5ee" "$GITHUB_EVENT_PATH" | sed 's/^.* //')"
+          curl -X POST "https://app.releaseready.dev/api/webhooks/github?projectId=cmmn4tloz0001l404xheadfr0"             -H "X-Hub-Signature-256: $RELEASEREADY_SIGNATURE"             -H "Content-Type: application/json"             --data-binary "@$GITHUB_EVENT_PATH"
 
 # ReleaseReady handles:
 # - project mapping
