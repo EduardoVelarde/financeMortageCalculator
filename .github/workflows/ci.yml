@@ -14,6 +14,9 @@ jobs:
         run: |
           RELEASEREADY_SIGNATURE="sha256=$(openssl dgst -sha256 -hmac "$RELEASEREADY_WEBHOOK_SECRET" "$GITHUB_EVENT_PATH" | sed 's/^.* //')"
 
+          echo "URL: $RELEASEREADY_WEBHOOK_URL"
+          echo "EVENT PATH: $GITHUB_EVENT_PATH"
+          
           curl -X POST "$RELEASEREADY_WEBHOOK_URL" \
             -H "X-Hub-Signature-256: $RELEASEREADY_SIGNATURE" \
             -H "Content-Type: application/json" \
