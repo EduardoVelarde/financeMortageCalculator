@@ -9,11 +9,15 @@ jobs:
     steps:
       - name: Let ReleaseReady orchestrate execution
         env:
+          RELEASEREADY_WEBHOOK_URL: ${{ secrets.RELEASEREADY_WEBHOOK_URL }}
           RELEASEREADY_WEBHOOK_SECRET: ${{ secrets.RELEASEREADY_WEBHOOK_SECRET }}
         run: |
           RELEASEREADY_SIGNATURE="sha256=$(openssl dgst -sha256 -hmac "$RELEASEREADY_WEBHOOK_SECRET" "$GITHUB_EVENT_PATH" | sed 's/^.* //')"
-          curl -X POST "$RELEASEREADY_WEBHOOK_URL"             -H "X-Hub-Signature-256: $RELEASEREADY_SIGNATURE"             -H "X-GitHub-Event: pull_request"             -H "Content-Type: application/json"             --data-binary "@$GITHUB_EVENT_PATH"
 
+          curl -X POST "$RELEASEREADY_WEBHOOK_URL" \
+            -H "X-Hub-Signature-256: $RELEASEREADY_SIGNATURE" \
+            -H "Content-Type: application/json" \
+            --data @"$GITHUB_EVENT_PATH"
 # ReleaseReady handles:
 # - project mapping
 # - trigger orchestration
