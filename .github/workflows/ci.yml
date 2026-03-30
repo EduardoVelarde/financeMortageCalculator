@@ -12,15 +12,16 @@ jobs:
           RELEASEREADY_WEBHOOK_URL: ${{ secrets.RELEASEREADY_WEBHOOK_URL }}
           RELEASEREADY_WEBHOOK_SECRET: ${{ secrets.RELEASEREADY_WEBHOOK_SECRET }}
         run: |
-          RELEASEREADY_SIGNATURE="sha256=$(openssl dgst -sha256 -hmac "$RELEASEREADY_WEBHOOK_SECRET" "$GITHUB_EVENT_PATH" | sed 's/^.* //')"
+          SIGNATURE=$(openssl dgst -sha256 -hmac "$RELEASEREADY_WEBHOOK_SECRET" -binary "$GITHUB_EVENT_PATH" | xxd -p -c 256)
+          RELEASEREADY_SIGNATURE="sha256=$SIGNATURE"
 
-          echo "URL: $RELEASEREADY_WEBHOOK_URL"
           echo "EVENT PATH: $GITHUB_EVENT_PATH"
-          
+          echo "Signature generated successfully"
+
           curl -X POST "$RELEASEREADY_WEBHOOK_URL" \
             -H "X-Hub-Signature-256: $RELEASEREADY_SIGNATURE" \
             -H "Content-Type: application/json" \
-            --data @"$GITHUB_EVENT_PATH"
+            --data-binary @"$GITHUB_EVENT_PATH"
 # ReleaseReady handles:
 # - project mapping
 # - trigger orchestration
