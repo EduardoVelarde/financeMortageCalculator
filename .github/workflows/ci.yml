@@ -10,7 +10,6 @@ jobs:
       - name: Let ReleaseReady orchestrate execution
         env:
           RELEASEREADY_WEBHOOK_SECRET: ${{ secrets.RELEASEREADY_WEBHOOK_SECRET }}
-          RELEASEREADY_WEBHOOK_URL: ${{ secrets.RELEASEREADY_WEBHOOK_URL}}
         run: |
           RELEASEREADY_WEBHOOK_URL="$(printf '%s' "$RELEASEREADY_WEBHOOK_URL" | tr -d '')"
           RELEASEREADY_WEBHOOK_SECRET="$(printf '%s' "$RELEASEREADY_WEBHOOK_SECRET" | tr -d '')"
