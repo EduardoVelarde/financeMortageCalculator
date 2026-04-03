@@ -21,3 +21,5 @@ jobs:
             echo "\nReleaseReady webhook failed with HTTP $STATUS_CODE" >&2
             exit 1
           fi
+
+# ReleaseReady handles:
