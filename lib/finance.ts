@@ -44,6 +44,11 @@ export interface CalculationResult {
   reducedTermMonths: number;
 }
 
+export interface DerivedLoanValues {
+  loanAmount: number;
+  monthlyMortgagePayment: number;
+}
+
 export function getDefaultInputs(): CalculatorInputs {
   return {
     propertyPrice: 2670000,
@@ -51,7 +56,7 @@ export function getDefaultInputs(): CalculatorInputs {
     loanAmount: 2136000,
     annualRate: 9.5,
     loanTermYears: 20,
-    monthlyMortgagePayment: 19500,
+    monthlyMortgagePayment: 19895,
     initialRent: 20000,
     annualRentGrowth: 5,
     extraMonthlyPrincipal: 5000,
@@ -70,7 +75,45 @@ function monthlyRate(annualRate: number): number {
   return annualRate / 100 / 12;
 }
 
-function runLoanSimulation(inputs: CalculatorInputs, useExtras: boolean): ScenarioSummary {
+function normalizeLoanAmount(propertyPrice: number, downPayment: number): number {
+  return Math.max(propertyPrice - downPayment, 0);
+}
+
+function calculateConventionalMortgagePayment(loanAmount: number, annualRate: number, loanTermYears: number): number {
+  if (loanAmount <= 0 || loanTermYears <= 0) return 0;
+
+  const months = loanTermYears * 12;
+  const r = monthlyRate(annualRate);
+
+  if (r === 0) {
+    return loanAmount / months;
+  }
+
+  const growthFactor = Math.pow(1 + r, months);
+  return (loanAmount * r * growthFactor) / (growthFactor - 1);
+}
+
+export function deriveLoanValues(inputs: CalculatorInputs): DerivedLoanValues {
+  const loanAmount = normalizeLoanAmount(inputs.propertyPrice, inputs.downPayment);
+  const monthlyMortgagePayment = Math.round(calculateConventionalMortgagePayment(loanAmount, inputs.annualRate, inputs.loanTermYears));
+
+  return {
+    loanAmount: safeNumber(loanAmount),
+    monthlyMortgagePayment: safeNumber(monthlyMortgagePayment)
+  };
+}
+
+function withDerivedLoanValues(inputs: CalculatorInputs): CalculatorInputs {
+  const derived = deriveLoanValues(inputs);
+  return {
+    ...inputs,
+    loanAmount: derived.loanAmount,
+    monthlyMortgagePayment: derived.monthlyMortgagePayment
+  };
+}
+
+function runLoanSimulation(rawInputs: CalculatorInputs, useExtras: boolean): ScenarioSummary {
+  const inputs = withDerivedLoanValues(rawInputs);
   const r = monthlyRate(inputs.annualRate);
   const loanTermMonths = inputs.loanTermYears * 12;
   const horizonMonths = inputs.analysisHorizonYears * 12;
@@ -120,7 +163,8 @@ function runLoanSimulation(inputs: CalculatorInputs, useExtras: boolean): Scenar
   };
 }
 
-export function generateAnnualProjection(inputs: CalculatorInputs): AnnualProjection[] {
+export function generateAnnualProjection(rawInputs: CalculatorInputs): AnnualProjection[] {
+  const inputs = withDerivedLoanValues(rawInputs);
   const rows: AnnualProjection[] = [];
   const base = runLoanSimulation(inputs, false);
   const withExtras = runLoanSimulation(inputs, true);
@@ -132,9 +176,12 @@ export function generateAnnualProjection(inputs: CalculatorInputs): AnnualProjec
 
   for (let year = 1; year <= inputs.analysisHorizonYears; year += 1) {
     const rentMonthly = inputs.initialRent * Math.pow(1 + inputs.annualRentGrowth / 100, year - 1);
-    const cashFlowMonthly = rentMonthly - inputs.monthlyMortgagePayment - inputs.monthlyExpenses;
+    let yearlyCashFlow = 0;
 
     for (let m = 1; m <= 12; m += 1) {
+      const mortgagePaymentForMonth = debtWithExtras > 0 ? inputs.monthlyMortgagePayment : 0;
+      yearlyCashFlow += rentMonthly - mortgagePaymentForMonth - inputs.monthlyExpenses;
+
       if (debtBase > 0) {
         const interestBase = debtBase * r;
         const principalBase = Math.max(inputs.monthlyMortgagePayment - interestBase, 0);
@@ -153,7 +200,8 @@ export function generateAnnualProjection(inputs: CalculatorInputs): AnnualProjec
     }
 
     const propertyValue = inputs.propertyPrice * Math.pow(1 + inputs.annualAppreciation / 100, year);
-    accumulatedCashFlow += cashFlowMonthly * 12;
+    const cashFlowMonthly = yearlyCashFlow / 12;
+    accumulatedCashFlow += yearlyCashFlow;
 
     rows.push({
       year,
@@ -185,18 +233,17 @@ export function generateAnnualProjection(inputs: CalculatorInputs): AnnualProjec
   return rows;
 }
 
-export function calculateInvestment(inputs: CalculatorInputs): CalculationResult {
+export function calculateInvestment(rawInputs: CalculatorInputs): CalculationResult {
+  const inputs = withDerivedLoanValues(rawInputs);
   const base = runLoanSimulation(inputs, false);
   const withExtras = runLoanSimulation(inputs, true);
   const annualRows = generateAnnualProjection(inputs);
   const horizonRow = annualRows[annualRows.length - 1];
 
   const initialMonthlyCashFlow = inputs.initialRent - inputs.monthlyMortgagePayment - inputs.monthlyExpenses;
-  const appreciationGain = horizonRow.propertyValue - inputs.propertyPrice;
   const cashFlowAccumulated = horizonRow.totalCashFlowAccumulated;
-  const capitalAmortized = withExtras.principalPaidAtHorizon;
   const interestSavings = base.totalInterestPaid - withExtras.totalInterestPaid;
-  const totalBenefitEstimated = cashFlowAccumulated + appreciationGain + capitalAmortized + interestSavings;
+  const totalBenefitEstimated = cashFlowAccumulated;
 
   return {
     initialMonthlyCashFlow,
@@ -214,8 +261,9 @@ export function validateInputs(inputs: CalculatorInputs): string[] {
   const errors: string[] = [];
 
   if (inputs.propertyPrice <= 0) errors.push('El precio de la propiedad debe ser mayor a 0.');
-  if (inputs.loanAmount <= 0) errors.push('El monto del crédito debe ser mayor a 0.');
-  if (inputs.monthlyMortgagePayment <= 0) errors.push('El pago mensual debe ser mayor a 0.');
+  if (inputs.downPayment < 0) errors.push('El enganche no puede ser negativo.');
+  if (inputs.downPayment >= inputs.propertyPrice) errors.push('El enganche debe ser menor al precio de la propiedad.');
+  if (inputs.annualRate < 0) errors.push('La tasa anual no puede ser negativa.');
   if (inputs.loanTermYears <= 0 || inputs.loanTermYears > 40) errors.push('El plazo del crédito debe estar entre 1 y 40 años.');
   if (inputs.analysisHorizonYears <= 0 || inputs.analysisHorizonYears > 40) errors.push('El horizonte de análisis debe estar entre 1 y 40 años.');
 
