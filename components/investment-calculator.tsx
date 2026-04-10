@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Line,
   LineChart,
@@ -11,7 +11,7 @@ import {
   ResponsiveContainer,
   Legend
 } from 'recharts';
-import { calculateInvestment, getDefaultInputs, validateInputs, type CalculatorInputs } from '@/lib/finance';
+import { calculateInvestment, deriveLoanValues, getDefaultInputs, validateInputs, type CalculatorInputs } from '@/lib/finance';
 import { formatCurrency, formatMonthsToYears } from '@/lib/format';
 
 const FIELD_DEFINITIONS: Array<{ key: keyof CalculatorInputs; label: string; step?: string; help?: string }> = [
@@ -86,6 +86,19 @@ export function InvestmentCalculator() {
   const defaults = useMemo(() => getDefaultInputs(), []);
   const [inputs, setInputs] = useState<CalculatorInputs>(defaults);
 
+  useEffect(() => {
+    const derived = deriveLoanValues(inputs);
+    if (inputs.loanAmount === derived.loanAmount && inputs.monthlyMortgagePayment === derived.monthlyMortgagePayment) {
+      return;
+    }
+
+    setInputs((prev) => ({
+      ...prev,
+      loanAmount: derived.loanAmount,
+      monthlyMortgagePayment: derived.monthlyMortgagePayment
+    }));
+  }, [inputs]);
+
   const errors = useMemo(() => validateInputs(inputs), [inputs]);
   const result = useMemo(() => calculateInvestment(inputs), [inputs]);
 
@@ -124,6 +137,14 @@ export function InvestmentCalculator() {
                     ...prev,
                     [field.key]: Number(event.target.value)
                   }))
+                }
+                readOnly={field.key === 'loanAmount' || field.key === 'monthlyMortgagePayment'}
+                title={
+                  field.key === 'loanAmount'
+                    ? 'Se calcula automáticamente como precio de la propiedad menos enganche.'
+                    : field.key === 'monthlyMortgagePayment'
+                      ? 'Se calcula automáticamente con fórmula hipotecaria tradicional.'
+                      : undefined
                 }
               />
             </label>
