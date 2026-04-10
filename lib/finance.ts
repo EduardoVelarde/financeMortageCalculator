@@ -56,7 +56,7 @@ export function getDefaultInputs(): CalculatorInputs {
     loanAmount: 2136000,
     annualRate: 9.5,
     loanTermYears: 20,
-    monthlyMortgagePayment: 19895.24,
+    monthlyMortgagePayment: 19895,
     initialRent: 20000,
     annualRentGrowth: 5,
     extraMonthlyPrincipal: 5000,
@@ -95,7 +95,7 @@ function calculateConventionalMortgagePayment(loanAmount: number, annualRate: nu
 
 export function deriveLoanValues(inputs: CalculatorInputs): DerivedLoanValues {
   const loanAmount = normalizeLoanAmount(inputs.propertyPrice, inputs.downPayment);
-  const monthlyMortgagePayment = calculateConventionalMortgagePayment(loanAmount, inputs.annualRate, inputs.loanTermYears);
+  const monthlyMortgagePayment = Math.round(calculateConventionalMortgagePayment(loanAmount, inputs.annualRate, inputs.loanTermYears));
 
   return {
     loanAmount: safeNumber(loanAmount),
@@ -176,9 +176,12 @@ export function generateAnnualProjection(rawInputs: CalculatorInputs): AnnualPro
 
   for (let year = 1; year <= inputs.analysisHorizonYears; year += 1) {
     const rentMonthly = inputs.initialRent * Math.pow(1 + inputs.annualRentGrowth / 100, year - 1);
-    const cashFlowMonthly = rentMonthly - inputs.monthlyMortgagePayment - inputs.monthlyExpenses;
+    let yearlyCashFlow = 0;
 
     for (let m = 1; m <= 12; m += 1) {
+      const mortgagePaymentForMonth = debtWithExtras > 0 ? inputs.monthlyMortgagePayment : 0;
+      yearlyCashFlow += rentMonthly - mortgagePaymentForMonth - inputs.monthlyExpenses;
+
       if (debtBase > 0) {
         const interestBase = debtBase * r;
         const principalBase = Math.max(inputs.monthlyMortgagePayment - interestBase, 0);
@@ -197,7 +200,8 @@ export function generateAnnualProjection(rawInputs: CalculatorInputs): AnnualPro
     }
 
     const propertyValue = inputs.propertyPrice * Math.pow(1 + inputs.annualAppreciation / 100, year);
-    accumulatedCashFlow += cashFlowMonthly * 12;
+    const cashFlowMonthly = yearlyCashFlow / 12;
+    accumulatedCashFlow += yearlyCashFlow;
 
     rows.push({
       year,
@@ -237,11 +241,9 @@ export function calculateInvestment(rawInputs: CalculatorInputs): CalculationRes
   const horizonRow = annualRows[annualRows.length - 1];
 
   const initialMonthlyCashFlow = inputs.initialRent - inputs.monthlyMortgagePayment - inputs.monthlyExpenses;
-  const appreciationGain = horizonRow.propertyValue - inputs.propertyPrice;
   const cashFlowAccumulated = horizonRow.totalCashFlowAccumulated;
-  const capitalAmortized = withExtras.principalPaidAtHorizon;
   const interestSavings = base.totalInterestPaid - withExtras.totalInterestPaid;
-  const totalBenefitEstimated = cashFlowAccumulated + appreciationGain + capitalAmortized + interestSavings;
+  const totalBenefitEstimated = cashFlowAccumulated;
 
   return {
     initialMonthlyCashFlow,

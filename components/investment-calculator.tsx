@@ -186,12 +186,11 @@ export function InvestmentCalculator() {
           <MetricCard title="Flujo mensual inicial" value={formatCurrency(result.initialMonthlyCashFlow)} help="Renta - hipoteca - gastos." />
           <MetricCard title="Flujo mensual año 5" value={formatCurrency(fifthYear.cashFlowMonthly)} />
           <MetricCard title="Flujo mensual año 10" value={formatCurrency(tenthYear.cashFlowMonthly)} />
-          <MetricCard title="Deuda restante (con aportaciones)" value={formatCurrency(result.withExtras.remainingDebtAtHorizon)} />
           <MetricCard title="Tiempo estimado para liquidar" value={formatMonthsToYears(result.withExtras.payoffMonths)} />
           <MetricCard title="Reducción de plazo" value={formatMonthsToYears(result.reducedTermMonths)} />
           <MetricCard title="Patrimonio neto proyectado" value={formatCurrency(result.netWorthProjected)} help="Valor de mercado proyectado menos deuda restante." />
           <MetricCard title="Ahorro estimado en intereses" value={formatCurrency(result.interestSavings)} />
-          <MetricCard title="Beneficio total estimado" value={formatCurrency(result.totalBenefitEstimated)} />
+          <MetricCard title="Beneficio total estimado" value={formatCurrency(result.totalBenefitEstimated)} help="Ganancia neta acumulada de rentas después de hipoteca y gastos en el horizonte." />
         </div>
 
         <div className="grid gap-4 xl:grid-cols-2">
