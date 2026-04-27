@@ -21,3 +21,27 @@ body {
 .help {
   @apply cursor-help rounded-full border border-slate-300 px-2 py-0.5 text-xs text-slate-500;
 }
+
+@media print {
+  body {
+    @apply bg-white;
+  }
+
+  .print\\:hidden {
+    display: none !important;
+  }
+
+  .card {
+    @apply border-slate-300 shadow-none;
+    break-inside: avoid;
+  }
+
+  details {
+    display: block;
+  }
+
+  details > summary {
+    list-style: none;
+    pointer-events: none;
+  }
+}

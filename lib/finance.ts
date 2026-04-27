@@ -1,49 +1,64 @@
 export type RentMode = 'manual' | 'coverage' | 'yield';
-export type VacancyMode = 'months' | 'percent';
-export type ScenarioName = 'conservador' | 'base' | 'optimista';
+export type ScenarioName = 'conservador' | 'base' | 'optimista' | 'personalizado';
+export type OperatingCostMode = 'fixed' | 'percent_rent' | 'percent_property_value';
 
-export interface ScenarioAssumptions {
+export interface RentalAssumptions {
   annualRentGrowth: number;
   annualAppreciation: number;
   vacancyRatePercent: number;
-  maintenanceMultiplier: number;
   initialRentCoveragePercent: number;
 }
 
-export interface CalculatorInputs {
+export interface OperatingCosts {
+  maintenanceAdmin: {
+    mode: OperatingCostMode;
+    value: number;
+  };
+  otherCosts: {
+    mode: OperatingCostMode;
+    value: number;
+  };
+  annualPropertyTax: number;
+  annualInsurance: number;
+  annualExtraMaintenance: number;
+  annualRepairs: number;
+}
+
+export interface ScenarioPreset {
+  name: ScenarioName;
+  label: string;
+  assumptions: RentalAssumptions;
+}
+
+export interface MortgageInputs {
   propertyPrice: number;
   downPayment: number;
   loanAmount: number;
   annualRate: number;
   loanTermYears: number;
   monthlyMortgagePayment: number;
+  rentMode: RentMode;
   initialRent: number;
-  annualRentGrowth: number;
+  initialRentYieldPercent: number;
+  analysisHorizonYears: number;
   extraMonthlyPrincipal: number;
   extraAnnualPrincipal: number;
-  annualAppreciation: number;
-  monthlyExpenses: number;
-  analysisHorizonYears: number;
-  annualPropertyTax: number;
-  annualInsurance: number;
-  annualExtraMaintenance: number;
-  annualRepairs: number;
-  monthlyAdministrationCost: number;
-  vacancyMode: VacancyMode;
-  vacancyMonthsPerYear: number;
-  vacancyRatePercent: number;
-  rentMode: RentMode;
-  initialRentCoveragePercent: number;
-  initialRentYieldPercent: number;
-  scenarios: Record<ScenarioName, ScenarioAssumptions>;
+  operatingCosts: OperatingCosts;
+  selectedScenario: ScenarioName;
+  customAssumptions: RentalAssumptions;
+  scenarioPresets: Record<Exclude<ScenarioName, 'personalizado'>, RentalAssumptions>;
 }
 
-export interface AnnualProjection {
+export interface AnnualProjectionRow {
   year: number;
-  rentMonthly: number;
-  effectiveRentMonthly: number;
-  cashFlowMonthly: number;
+  rentGrossMonthly: number;
+  vacancyMonthlyImpact: number;
+  rentEffectiveMonthly: number;
+  mortgageMonthlyCost: number;
+  maintenanceAdminMonthlyCost: number;
+  otherCostsMonthly: number;
   ownershipCostMonthly: number;
+  netCashFlowMonthly: number;
   remainingDebtBase: number;
   remainingDebtWithExtras: number;
   propertyValue: number;
@@ -52,42 +67,50 @@ export interface AnnualProjection {
   totalCashFlowAccumulated: number;
 }
 
+export interface ScenarioKpiSummary {
+  name: ScenarioName;
+  initialCoverageRatio: number;
+  vacancyRatePercent: number;
+  annualRentGrowth: number;
+  annualAppreciation: number;
+  adjustedMonthlyCashFlowAtHorizon: number;
+  breakEvenYear: number | null;
+  projectedNetWorth: number;
+  sustainedByRent: boolean;
+}
+
+export interface ScenarioResult {
+  scenario: ScenarioPreset;
+  annualRows: AnnualProjectionRow[];
+  initialMonthlyCashFlow: number;
+  flowYear5: number;
+  flowYear10: number;
+  breakEvenYear: number | null;
+  rentToMortgageCoverage: number;
+  propertySelfSustained: boolean;
+  netWorthProjected: number;
+  remainingDebtAtHorizon: number;
+  totalHoldingCost: number;
+  totalInterestPaidWithExtras: number;
+  savingsFromExtraPayments: number;
+  estimatedAccumulatedReturn: number;
+  payoffMonthsWithExtras: number;
+}
+
+export interface CalculationResult {
+  selectedScenario: ScenarioResult;
+  scenarioSummaries: ScenarioKpiSummary[];
+  selectedAssumptions: RentalAssumptions;
+  amortization: {
+    withExtras: ScenarioSummary;
+    base: ScenarioSummary;
+  };
+}
+
 export interface ScenarioSummary {
   payoffMonths: number;
   totalInterestPaid: number;
   remainingDebtAtHorizon: number;
-  principalPaidAtHorizon: number;
-}
-
-export interface ScenarioKpiSummary {
-  name: ScenarioName;
-  initialCoverageRatio: number;
-  adjustedMonthlyCashFlowAtHorizon: number;
-  breakEvenYear: number | null;
-  projectedNetWorth: number;
-  holdingCostTotal: number;
-  sustainedByRent: boolean;
-}
-
-export interface CalculationResult {
-  initialMonthlyCashFlow: number;
-  annualRows: AnnualProjection[];
-  base: ScenarioSummary;
-  withExtras: ScenarioSummary;
-  netWorthProjected: number;
-  totalBenefitEstimated: number;
-  interestSavings: number;
-  reducedTermMonths: number;
-  rentToMortgageCoverage: number;
-  flowAdjustedForVacancy: number;
-  totalHoldingCost: number;
-  breakEvenYear: number | null;
-  remainingDebtAtHorizon: number;
-  totalInterestPaidWithExtras: number;
-  savingsFromExtraPayments: number;
-  estimatedAccumulatedReturn: number;
-  propertySelfSustained: boolean;
-  scenarioSummaries: ScenarioKpiSummary[];
 }
 
 export interface DerivedLoanValues {
@@ -95,7 +118,7 @@ export interface DerivedLoanValues {
   monthlyMortgagePayment: number;
 }
 
-export function getDefaultInputs(): CalculatorInputs {
+export function getDefaultInputs(): MortgageInputs {
   return {
     propertyPrice: 2670000,
     downPayment: 534000,
@@ -103,52 +126,54 @@ export function getDefaultInputs(): CalculatorInputs {
     annualRate: 9.5,
     loanTermYears: 20,
     monthlyMortgagePayment: 19895,
+    rentMode: 'coverage',
     initialRent: 20000,
-    annualRentGrowth: 5,
+    initialRentYieldPercent: 8,
+    analysisHorizonYears: 10,
     extraMonthlyPrincipal: 5000,
     extraAnnualPrincipal: 60000,
-    annualAppreciation: 4,
-    monthlyExpenses: 1500,
-    analysisHorizonYears: 10,
-    annualPropertyTax: 12000,
-    annualInsurance: 6000,
-    annualExtraMaintenance: 18000,
-    annualRepairs: 12000,
-    monthlyAdministrationCost: 1000,
-    vacancyMode: 'months',
-    vacancyMonthsPerYear: 1,
-    vacancyRatePercent: 8.33,
-    rentMode: 'manual',
-    initialRentCoveragePercent: 80,
-    initialRentYieldPercent: 8,
-    scenarios: {
+    operatingCosts: {
+      maintenanceAdmin: {
+        mode: 'fixed',
+        value: 1000
+      },
+      otherCosts: {
+        mode: 'fixed',
+        value: 1500
+      },
+      annualPropertyTax: 12000,
+      annualInsurance: 6000,
+      annualExtraMaintenance: 18000,
+      annualRepairs: 12000
+    },
+    selectedScenario: 'base',
+    customAssumptions: {
+      annualRentGrowth: 5,
+      annualAppreciation: 4,
+      vacancyRatePercent: 8,
+      initialRentCoveragePercent: 80
+    },
+    scenarioPresets: {
       conservador: {
         annualRentGrowth: 3,
         annualAppreciation: 2,
         vacancyRatePercent: 12,
-        maintenanceMultiplier: 1.2,
         initialRentCoveragePercent: 70
       },
       base: {
         annualRentGrowth: 5,
         annualAppreciation: 4,
         vacancyRatePercent: 8,
-        maintenanceMultiplier: 1,
         initialRentCoveragePercent: 80
       },
       optimista: {
         annualRentGrowth: 7,
         annualAppreciation: 6,
         vacancyRatePercent: 5,
-        maintenanceMultiplier: 0.9,
         initialRentCoveragePercent: 95
       }
     }
   };
-}
-
-function safeNumber(value: number, fallback = 0): number {
-  return Number.isFinite(value) ? value : fallback;
 }
 
 function monthlyRate(annualRate: number): number {
@@ -173,59 +198,63 @@ function calculateConventionalMortgagePayment(loanAmount: number, annualRate: nu
   return (loanAmount * r * growthFactor) / (growthFactor - 1);
 }
 
-export function deriveLoanValues(inputs: CalculatorInputs): DerivedLoanValues {
+export function deriveLoanValues(inputs: MortgageInputs): DerivedLoanValues {
   const loanAmount = normalizeLoanAmount(inputs.propertyPrice, inputs.downPayment);
   const monthlyMortgagePayment = Math.round(calculateConventionalMortgagePayment(loanAmount, inputs.annualRate, inputs.loanTermYears));
 
   return {
-    loanAmount: safeNumber(loanAmount),
-    monthlyMortgagePayment: safeNumber(monthlyMortgagePayment)
+    loanAmount,
+    monthlyMortgagePayment
   };
 }
 
-function calculateInitialRent(inputs: CalculatorInputs, coverageOverride?: number): number {
-  if (inputs.rentMode === 'manual') {
-    return Math.max(inputs.initialRent, 0);
+function resolveAssumptions(inputs: MortgageInputs, scenarioName?: ScenarioName): ScenarioPreset {
+  const selected = scenarioName ?? inputs.selectedScenario;
+
+  if (selected === 'personalizado') {
+    return {
+      name: 'personalizado',
+      label: 'Personalizado',
+      assumptions: { ...inputs.customAssumptions }
+    };
   }
+
+  const labels: Record<Exclude<ScenarioName, 'personalizado'>, string> = {
+    conservador: 'Conservador',
+    base: 'Base',
+    optimista: 'Optimista'
+  };
+
+  return {
+    name: selected,
+    label: labels[selected],
+    assumptions: { ...inputs.scenarioPresets[selected] }
+  };
+}
+
+function calculateInitialRent(inputs: MortgageInputs, assumptions: RentalAssumptions): number {
+  if (inputs.rentMode === 'manual') return Math.max(inputs.initialRent, 0);
 
   if (inputs.rentMode === 'yield') {
     const annualRent = inputs.propertyPrice * (Math.max(inputs.initialRentYieldPercent, 0) / 100);
     return annualRent / 12;
   }
 
-  const coverage = (coverageOverride ?? inputs.initialRentCoveragePercent) / 100;
-  return Math.max(inputs.monthlyMortgagePayment * Math.max(coverage, 0), 0);
+  return inputs.monthlyMortgagePayment * Math.max(assumptions.initialRentCoveragePercent, 0) / 100;
 }
 
-function normalizeVacancyRate(inputs: CalculatorInputs, forcedPercent?: number): number {
-  if (typeof forcedPercent === 'number') {
-    return Math.min(Math.max(forcedPercent / 100, 0), 1);
-  }
-
-  if (inputs.vacancyMode === 'months') {
-    return Math.min(Math.max(inputs.vacancyMonthsPerYear / 12, 0), 1);
-  }
-
-  return Math.min(Math.max(inputs.vacancyRatePercent / 100, 0), 1);
+function resolveMonthlyCost(mode: OperatingCostMode, value: number, rentGrossMonthly: number, propertyValue: number): number {
+  const safeValue = Math.max(value, 0);
+  if (mode === 'fixed') return safeValue;
+  if (mode === 'percent_rent') return rentGrossMonthly * safeValue / 100;
+  return (propertyValue * safeValue / 100) / 12;
 }
 
-function yearlyOwnershipCosts(inputs: CalculatorInputs, maintenanceMultiplier = 1): number {
-  const recurringAnnual = (inputs.monthlyExpenses + inputs.monthlyAdministrationCost) * 12;
-  const annualFixed = inputs.annualPropertyTax + inputs.annualInsurance + inputs.annualExtraMaintenance + inputs.annualRepairs;
-  return (recurringAnnual + annualFixed) * maintenanceMultiplier;
+function annualFixedCosts(costs: OperatingCosts): number {
+  return costs.annualPropertyTax + costs.annualInsurance + costs.annualExtraMaintenance + costs.annualRepairs;
 }
 
-function withDerivedLoanValues(inputs: CalculatorInputs): CalculatorInputs {
-  const derived = deriveLoanValues(inputs);
-  return {
-    ...inputs,
-    loanAmount: derived.loanAmount,
-    monthlyMortgagePayment: derived.monthlyMortgagePayment
-  };
-}
-
-function runLoanSimulation(rawInputs: CalculatorInputs, useExtras: boolean): ScenarioSummary {
-  const inputs = withDerivedLoanValues(rawInputs);
+function runLoanSimulation(inputs: MortgageInputs, useExtras: boolean): ScenarioSummary {
   const r = monthlyRate(inputs.annualRate);
   const loanTermMonths = inputs.loanTermYears * 12;
   const horizonMonths = inputs.analysisHorizonYears * 12;
@@ -239,77 +268,70 @@ function runLoanSimulation(rawInputs: CalculatorInputs, useExtras: boolean): Sce
     if (debt <= 0.000001) {
       payoffMonths = month - 1;
       debt = 0;
-      if (month <= horizonMonths) {
-        remainingAtHorizon = 0;
-      }
+      if (month <= horizonMonths) remainingAtHorizon = 0;
       break;
     }
 
     const interest = debt * r;
-    const principalBase = Math.max(inputs.monthlyMortgagePayment - interest, 0);
+    let principal = Math.max(inputs.monthlyMortgagePayment - interest, 0);
 
-    let paymentToPrincipal = principalBase;
     if (useExtras) {
-      paymentToPrincipal += inputs.extraMonthlyPrincipal;
-      if (month % 12 === 0) {
-        paymentToPrincipal += inputs.extraAnnualPrincipal;
-      }
+      principal += inputs.extraMonthlyPrincipal;
+      if (month % 12 === 0) principal += inputs.extraAnnualPrincipal;
     }
 
-    const principalApplied = Math.min(paymentToPrincipal, debt);
+    const principalApplied = Math.min(principal, debt);
     debt = Math.max(debt - principalApplied, 0);
     interestPaid += interest;
 
-    if (month === horizonMonths) {
-      remainingAtHorizon = debt;
-    }
+    if (month === horizonMonths) remainingAtHorizon = debt;
   }
-
-  const principalPaidAtHorizon = Math.max(inputs.loanAmount - remainingAtHorizon, 0);
 
   return {
     payoffMonths,
-    totalInterestPaid: safeNumber(interestPaid),
-    remainingDebtAtHorizon: safeNumber(remainingAtHorizon),
-    principalPaidAtHorizon: safeNumber(principalPaidAtHorizon)
+    totalInterestPaid: interestPaid,
+    remainingDebtAtHorizon: remainingAtHorizon
   };
 }
 
-interface ProjectionOptions {
-  rentGrowth: number;
-  appreciation: number;
-  vacancyPercent?: number;
-  maintenanceMultiplier?: number;
-  initialRentCoveragePercent?: number;
-}
-
-function generateAnnualProjectionWithAssumptions(rawInputs: CalculatorInputs, options?: ProjectionOptions): AnnualProjection[] {
-  const inputs = withDerivedLoanValues(rawInputs);
-  const rows: AnnualProjection[] = [];
-  const base = runLoanSimulation(inputs, false);
-  const withExtras = runLoanSimulation(inputs, true);
+export function calculateMortgageInvestmentScenario(inputs: MortgageInputs, scenarioName?: ScenarioName): ScenarioResult {
+  const scenario = resolveAssumptions(inputs, scenarioName);
+  const assumptions = scenario.assumptions;
   const r = monthlyRate(inputs.annualRate);
 
-  const rentGrowth = options?.rentGrowth ?? inputs.annualRentGrowth;
-  const appreciation = options?.appreciation ?? inputs.annualAppreciation;
-  const vacancyRate = normalizeVacancyRate(inputs, options?.vacancyPercent);
-  const maintenanceMultiplier = options?.maintenanceMultiplier ?? 1;
+  const base = runLoanSimulation(inputs, false);
+  const withExtras = runLoanSimulation(inputs, true);
 
+  const rows: AnnualProjectionRow[] = [];
   let debtBase = inputs.loanAmount;
   let debtWithExtras = inputs.loanAmount;
   let accumulatedCashFlow = 0;
 
-  const initialRentMonthly = calculateInitialRent(inputs, options?.initialRentCoveragePercent);
+  const initialRentGross = calculateInitialRent(inputs, assumptions);
 
   for (let year = 1; year <= inputs.analysisHorizonYears; year += 1) {
-    const rentMonthly = initialRentMonthly * Math.pow(1 + rentGrowth / 100, year - 1);
-    const effectiveRentMonthly = rentMonthly * (1 - vacancyRate);
-    const ownershipCostMonthly = yearlyOwnershipCosts(inputs, maintenanceMultiplier) / 12;
-    let yearlyCashFlow = 0;
+    const propertyValue = inputs.propertyPrice * Math.pow(1 + assumptions.annualAppreciation / 100, year);
+    const rentGrossMonthly = initialRentGross * Math.pow(1 + assumptions.annualRentGrowth / 100, year - 1);
+    const vacancyMonthlyImpact = rentGrossMonthly * (Math.max(assumptions.vacancyRatePercent, 0) / 100);
+    const rentEffectiveMonthly = rentGrossMonthly - vacancyMonthlyImpact;
 
-    for (let m = 1; m <= 12; m += 1) {
-      const mortgagePaymentForMonth = debtWithExtras > 0 ? inputs.monthlyMortgagePayment : 0;
-      yearlyCashFlow += effectiveRentMonthly - mortgagePaymentForMonth - ownershipCostMonthly;
+    const maintenanceAdminMonthlyCost = resolveMonthlyCost(
+      inputs.operatingCosts.maintenanceAdmin.mode,
+      inputs.operatingCosts.maintenanceAdmin.value,
+      rentGrossMonthly,
+      propertyValue
+    );
+
+    const otherCostsMonthly =
+      resolveMonthlyCost(inputs.operatingCosts.otherCosts.mode, inputs.operatingCosts.otherCosts.value, rentGrossMonthly, propertyValue) + annualFixedCosts(inputs.operatingCosts) / 12;
+
+    const mortgageMonthlyCost = debtWithExtras > 0 ? inputs.monthlyMortgagePayment : 0;
+    const ownershipCostMonthly = maintenanceAdminMonthlyCost + otherCostsMonthly;
+
+    let yearCashFlow = 0;
+
+    for (let month = 1; month <= 12; month += 1) {
+      yearCashFlow += rentEffectiveMonthly - mortgageMonthlyCost - maintenanceAdminMonthlyCost - otherCostsMonthly;
 
       if (debtBase > 0) {
         const interestBase = debtBase * r;
@@ -319,25 +341,25 @@ function generateAnnualProjectionWithAssumptions(rawInputs: CalculatorInputs, op
 
       if (debtWithExtras > 0) {
         const interestWith = debtWithExtras * r;
-        const principalWith = Math.max(inputs.monthlyMortgagePayment - interestWith, 0) + inputs.extraMonthlyPrincipal;
-        let principalToApply = principalWith;
-        if (m === 12) {
-          principalToApply += inputs.extraAnnualPrincipal;
-        }
-        debtWithExtras = Math.max(debtWithExtras - Math.min(principalToApply, debtWithExtras), 0);
+        let principalWith = Math.max(inputs.monthlyMortgagePayment - interestWith, 0) + inputs.extraMonthlyPrincipal;
+        if (month === 12) principalWith += inputs.extraAnnualPrincipal;
+        debtWithExtras = Math.max(debtWithExtras - Math.min(principalWith, debtWithExtras), 0);
       }
     }
 
-    const propertyValue = inputs.propertyPrice * Math.pow(1 + appreciation / 100, year);
-    const cashFlowMonthly = yearlyCashFlow / 12;
-    accumulatedCashFlow += yearlyCashFlow;
+    const netCashFlowMonthly = yearCashFlow / 12;
+    accumulatedCashFlow += yearCashFlow;
 
     rows.push({
       year,
-      rentMonthly,
-      effectiveRentMonthly,
-      cashFlowMonthly,
+      rentGrossMonthly,
+      vacancyMonthlyImpact,
+      rentEffectiveMonthly,
+      mortgageMonthlyCost,
+      maintenanceAdminMonthlyCost,
+      otherCostsMonthly,
       ownershipCostMonthly,
+      netCashFlowMonthly,
       remainingDebtBase: debtBase,
       remainingDebtWithExtras: debtWithExtras,
       propertyValue,
@@ -347,105 +369,84 @@ function generateAnnualProjectionWithAssumptions(rawInputs: CalculatorInputs, op
     });
   }
 
-  if (!rows.length) {
-    rows.push({
-      year: 0,
-      rentMonthly: initialRentMonthly,
-      effectiveRentMonthly: initialRentMonthly * (1 - vacancyRate),
-      cashFlowMonthly: initialRentMonthly - inputs.monthlyMortgagePayment - inputs.monthlyExpenses,
-      ownershipCostMonthly: yearlyOwnershipCosts(inputs) / 12,
-      remainingDebtBase: base.remainingDebtAtHorizon,
-      remainingDebtWithExtras: withExtras.remainingDebtAtHorizon,
-      propertyValue: inputs.propertyPrice,
-      netWorthBase: inputs.propertyPrice - base.remainingDebtAtHorizon,
-      netWorthWithExtras: inputs.propertyPrice - withExtras.remainingDebtAtHorizon,
-      totalCashFlowAccumulated: 0
-    });
-  }
+  const first = rows[0];
+  const horizon = rows[rows.length - 1];
 
-  return rows;
+  const flowYear5 = rows.find((row) => row.year === 5)?.netCashFlowMonthly ?? horizon.netCashFlowMonthly;
+  const flowYear10 = rows.find((row) => row.year === 10)?.netCashFlowMonthly ?? horizon.netCashFlowMonthly;
+
+  return {
+    scenario,
+    annualRows: rows,
+    initialMonthlyCashFlow: first.netCashFlowMonthly,
+    flowYear5,
+    flowYear10,
+    breakEvenYear: rows.find((row) => row.netCashFlowMonthly >= 0)?.year ?? null,
+    rentToMortgageCoverage: first.rentEffectiveMonthly / Math.max(inputs.monthlyMortgagePayment, 1),
+    propertySelfSustained: first.netCashFlowMonthly >= 0,
+    netWorthProjected: horizon.netWorthWithExtras,
+    remainingDebtAtHorizon: horizon.remainingDebtWithExtras,
+    totalHoldingCost: rows.reduce((acc, row) => acc + row.ownershipCostMonthly * 12, 0),
+    totalInterestPaidWithExtras: withExtras.totalInterestPaid,
+    savingsFromExtraPayments: base.totalInterestPaid - withExtras.totalInterestPaid,
+    estimatedAccumulatedReturn: horizon.totalCashFlowAccumulated + horizon.netWorthWithExtras - inputs.downPayment,
+    payoffMonthsWithExtras: withExtras.payoffMonths
+  };
 }
 
-export function generateAnnualProjection(rawInputs: CalculatorInputs): AnnualProjection[] {
-  return generateAnnualProjectionWithAssumptions(rawInputs);
-}
+export function calculateInvestment(rawInputs: MortgageInputs): CalculationResult {
+  const derived = deriveLoanValues(rawInputs);
+  const inputs: MortgageInputs = {
+    ...rawInputs,
+    loanAmount: derived.loanAmount,
+    monthlyMortgagePayment: derived.monthlyMortgagePayment
+  };
 
-function scenarioSummary(rawInputs: CalculatorInputs, name: ScenarioName): ScenarioKpiSummary {
-  const scenario = rawInputs.scenarios[name];
-  const rows = generateAnnualProjectionWithAssumptions(rawInputs, {
-    rentGrowth: scenario.annualRentGrowth,
-    appreciation: scenario.annualAppreciation,
-    vacancyPercent: scenario.vacancyRatePercent,
-    maintenanceMultiplier: scenario.maintenanceMultiplier,
-    initialRentCoveragePercent: scenario.initialRentCoveragePercent
+  const selectedScenario = calculateMortgageInvestmentScenario(inputs, inputs.selectedScenario);
+
+  const scenarioSummaries: ScenarioKpiSummary[] = (['conservador', 'base', 'optimista'] as const).map((scenarioName) => {
+    const result = calculateMortgageInvestmentScenario(inputs, scenarioName);
+    const assumptions = inputs.scenarioPresets[scenarioName];
+
+    return {
+      name: scenarioName,
+      initialCoverageRatio: result.rentToMortgageCoverage,
+      vacancyRatePercent: assumptions.vacancyRatePercent,
+      annualRentGrowth: assumptions.annualRentGrowth,
+      annualAppreciation: assumptions.annualAppreciation,
+      adjustedMonthlyCashFlowAtHorizon: result.annualRows[result.annualRows.length - 1].netCashFlowMonthly,
+      breakEvenYear: result.breakEvenYear,
+      projectedNetWorth: result.netWorthProjected,
+      sustainedByRent: result.propertySelfSustained
+    };
   });
 
-  const first = rows[0];
-  const last = rows[rows.length - 1];
-  const breakEvenYear = rows.find((row) => row.cashFlowMonthly >= 0)?.year ?? null;
-
   return {
-    name,
-    initialCoverageRatio: first.effectiveRentMonthly / Math.max(rawInputs.monthlyMortgagePayment, 1),
-    adjustedMonthlyCashFlowAtHorizon: last.cashFlowMonthly,
-    breakEvenYear,
-    projectedNetWorth: last.netWorthWithExtras,
-    holdingCostTotal: rows.reduce((acc, row) => acc + row.ownershipCostMonthly * 12, 0),
-    sustainedByRent: first.cashFlowMonthly >= 0
+    selectedScenario,
+    scenarioSummaries,
+    selectedAssumptions: selectedScenario.scenario.assumptions,
+    amortization: {
+      base: runLoanSimulation(inputs, false),
+      withExtras: runLoanSimulation(inputs, true)
+    }
   };
 }
 
-export function calculateInvestment(rawInputs: CalculatorInputs): CalculationResult {
-  const inputs = withDerivedLoanValues(rawInputs);
-  const base = runLoanSimulation(inputs, false);
-  const withExtras = runLoanSimulation(inputs, true);
-  const annualRows = generateAnnualProjection(inputs);
-  const horizonRow = annualRows[annualRows.length - 1];
-  const firstRow = annualRows[0];
-
-  const initialMonthlyCashFlow = firstRow.cashFlowMonthly;
-  const cashFlowAccumulated = horizonRow.totalCashFlowAccumulated;
-  const interestSavings = base.totalInterestPaid - withExtras.totalInterestPaid;
-  const totalBenefitEstimated = cashFlowAccumulated;
-  const breakEvenYear = annualRows.find((row) => row.cashFlowMonthly >= 0)?.year ?? null;
-  const totalHoldingCost = annualRows.reduce((acc, row) => acc + row.ownershipCostMonthly * 12, 0);
-
-  const scenarioNames: ScenarioName[] = ['conservador', 'base', 'optimista'];
-  const scenarioSummaries: ScenarioKpiSummary[] = scenarioNames.map((name) => scenarioSummary(inputs, name));
-
-  return {
-    initialMonthlyCashFlow,
-    annualRows,
-    base,
-    withExtras,
-    netWorthProjected: horizonRow.netWorthWithExtras,
-    totalBenefitEstimated,
-    interestSavings,
-    reducedTermMonths: Math.max(base.payoffMonths - withExtras.payoffMonths, 0),
-    rentToMortgageCoverage: firstRow.effectiveRentMonthly / Math.max(inputs.monthlyMortgagePayment, 1),
-    flowAdjustedForVacancy: firstRow.cashFlowMonthly,
-    totalHoldingCost,
-    breakEvenYear,
-    remainingDebtAtHorizon: withExtras.remainingDebtAtHorizon,
-    totalInterestPaidWithExtras: withExtras.totalInterestPaid,
-    savingsFromExtraPayments: interestSavings,
-    estimatedAccumulatedReturn: totalBenefitEstimated + horizonRow.netWorthWithExtras - inputs.downPayment,
-    propertySelfSustained: firstRow.cashFlowMonthly >= 0,
-    scenarioSummaries
-  };
-}
-
-export function validateInputs(inputs: CalculatorInputs): string[] {
+export function validateInputs(inputs: MortgageInputs): string[] {
   const errors: string[] = [];
 
   if (inputs.propertyPrice <= 0) errors.push('El precio de la propiedad debe ser mayor a 0.');
   if (inputs.downPayment < 0) errors.push('El enganche no puede ser negativo.');
-  if (inputs.downPayment >= inputs.propertyPrice) errors.push('El enganche debe ser menor al precio de la propiedad.');
-  if (inputs.annualRate < 0) errors.push('La tasa anual no puede ser negativa.');
-  if (inputs.loanTermYears <= 0 || inputs.loanTermYears > 40) errors.push('El plazo del crédito debe estar entre 1 y 40 años.');
+  if (inputs.downPayment > inputs.propertyPrice) errors.push('El enganche no puede ser mayor al precio de la propiedad.');
+  if (inputs.loanTermYears <= 0 || inputs.loanTermYears > 40) errors.push('El plazo del crédito debe ser mayor a 0 y menor o igual a 40 años.');
+  if (inputs.annualRate < 0) errors.push('La tasa anual debe ser mayor o igual a 0.');
   if (inputs.analysisHorizonYears <= 0 || inputs.analysisHorizonYears > 40) errors.push('El horizonte de análisis debe estar entre 1 y 40 años.');
-  if (inputs.vacancyMonthsPerYear < 0 || inputs.vacancyMonthsPerYear > 12) errors.push('La vacancia en meses debe estar entre 0 y 12.');
-  if (inputs.vacancyRatePercent < 0 || inputs.vacancyRatePercent > 100) errors.push('La vacancia en porcentaje debe estar entre 0% y 100%.');
+
+  const assumption = inputs.selectedScenario === 'personalizado' ? inputs.customAssumptions : inputs.scenarioPresets[inputs.selectedScenario];
+
+  if (assumption.vacancyRatePercent < 0 || assumption.vacancyRatePercent > 100) errors.push('La vacancia debe estar entre 0% y 100%.');
+  if (assumption.initialRentCoveragePercent <= 0 && inputs.rentMode === 'coverage') errors.push('La cobertura inicial debe ser mayor a 0.');
+  if (inputs.initialRent <= 0 && inputs.rentMode === 'manual') errors.push('La renta inicial manual debe ser mayor a 0.');
 
   return errors;
 }
