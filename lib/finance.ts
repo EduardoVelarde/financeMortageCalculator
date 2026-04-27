@@ -1,3 +1,15 @@
+export type RentMode = 'manual' | 'coverage' | 'yield';
+export type VacancyMode = 'months' | 'percent';
+export type ScenarioName = 'conservador' | 'base' | 'optimista';
+
+export interface ScenarioAssumptions {
+  annualRentGrowth: number;
+  annualAppreciation: number;
+  vacancyRatePercent: number;
+  maintenanceMultiplier: number;
+  initialRentCoveragePercent: number;
+}
+
 export interface CalculatorInputs {
   propertyPrice: number;
   downPayment: number;
@@ -12,12 +24,26 @@ export interface CalculatorInputs {
   annualAppreciation: number;
   monthlyExpenses: number;
   analysisHorizonYears: number;
+  annualPropertyTax: number;
+  annualInsurance: number;
+  annualExtraMaintenance: number;
+  annualRepairs: number;
+  monthlyAdministrationCost: number;
+  vacancyMode: VacancyMode;
+  vacancyMonthsPerYear: number;
+  vacancyRatePercent: number;
+  rentMode: RentMode;
+  initialRentCoveragePercent: number;
+  initialRentYieldPercent: number;
+  scenarios: Record<ScenarioName, ScenarioAssumptions>;
 }
 
 export interface AnnualProjection {
   year: number;
   rentMonthly: number;
+  effectiveRentMonthly: number;
   cashFlowMonthly: number;
+  ownershipCostMonthly: number;
   remainingDebtBase: number;
   remainingDebtWithExtras: number;
   propertyValue: number;
@@ -33,6 +59,16 @@ export interface ScenarioSummary {
   principalPaidAtHorizon: number;
 }
 
+export interface ScenarioKpiSummary {
+  name: ScenarioName;
+  initialCoverageRatio: number;
+  adjustedMonthlyCashFlowAtHorizon: number;
+  breakEvenYear: number | null;
+  projectedNetWorth: number;
+  holdingCostTotal: number;
+  sustainedByRent: boolean;
+}
+
 export interface CalculationResult {
   initialMonthlyCashFlow: number;
   annualRows: AnnualProjection[];
@@ -42,6 +78,16 @@ export interface CalculationResult {
   totalBenefitEstimated: number;
   interestSavings: number;
   reducedTermMonths: number;
+  rentToMortgageCoverage: number;
+  flowAdjustedForVacancy: number;
+  totalHoldingCost: number;
+  breakEvenYear: number | null;
+  remainingDebtAtHorizon: number;
+  totalInterestPaidWithExtras: number;
+  savingsFromExtraPayments: number;
+  estimatedAccumulatedReturn: number;
+  propertySelfSustained: boolean;
+  scenarioSummaries: ScenarioKpiSummary[];
 }
 
 export interface DerivedLoanValues {
@@ -63,7 +109,41 @@ export function getDefaultInputs(): CalculatorInputs {
     extraAnnualPrincipal: 60000,
     annualAppreciation: 4,
     monthlyExpenses: 1500,
-    analysisHorizonYears: 10
+    analysisHorizonYears: 10,
+    annualPropertyTax: 12000,
+    annualInsurance: 6000,
+    annualExtraMaintenance: 18000,
+    annualRepairs: 12000,
+    monthlyAdministrationCost: 1000,
+    vacancyMode: 'months',
+    vacancyMonthsPerYear: 1,
+    vacancyRatePercent: 8.33,
+    rentMode: 'manual',
+    initialRentCoveragePercent: 80,
+    initialRentYieldPercent: 8,
+    scenarios: {
+      conservador: {
+        annualRentGrowth: 3,
+        annualAppreciation: 2,
+        vacancyRatePercent: 12,
+        maintenanceMultiplier: 1.2,
+        initialRentCoveragePercent: 70
+      },
+      base: {
+        annualRentGrowth: 5,
+        annualAppreciation: 4,
+        vacancyRatePercent: 8,
+        maintenanceMultiplier: 1,
+        initialRentCoveragePercent: 80
+      },
+      optimista: {
+        annualRentGrowth: 7,
+        annualAppreciation: 6,
+        vacancyRatePercent: 5,
+        maintenanceMultiplier: 0.9,
+        initialRentCoveragePercent: 95
+      }
+    }
   };
 }
 
@@ -101,6 +181,38 @@ export function deriveLoanValues(inputs: CalculatorInputs): DerivedLoanValues {
     loanAmount: safeNumber(loanAmount),
     monthlyMortgagePayment: safeNumber(monthlyMortgagePayment)
   };
+}
+
+function calculateInitialRent(inputs: CalculatorInputs, coverageOverride?: number): number {
+  if (inputs.rentMode === 'manual') {
+    return Math.max(inputs.initialRent, 0);
+  }
+
+  if (inputs.rentMode === 'yield') {
+    const annualRent = inputs.propertyPrice * (Math.max(inputs.initialRentYieldPercent, 0) / 100);
+    return annualRent / 12;
+  }
+
+  const coverage = (coverageOverride ?? inputs.initialRentCoveragePercent) / 100;
+  return Math.max(inputs.monthlyMortgagePayment * Math.max(coverage, 0), 0);
+}
+
+function normalizeVacancyRate(inputs: CalculatorInputs, forcedPercent?: number): number {
+  if (typeof forcedPercent === 'number') {
+    return Math.min(Math.max(forcedPercent / 100, 0), 1);
+  }
+
+  if (inputs.vacancyMode === 'months') {
+    return Math.min(Math.max(inputs.vacancyMonthsPerYear / 12, 0), 1);
+  }
+
+  return Math.min(Math.max(inputs.vacancyRatePercent / 100, 0), 1);
+}
+
+function yearlyOwnershipCosts(inputs: CalculatorInputs, maintenanceMultiplier = 1): number {
+  const recurringAnnual = (inputs.monthlyExpenses + inputs.monthlyAdministrationCost) * 12;
+  const annualFixed = inputs.annualPropertyTax + inputs.annualInsurance + inputs.annualExtraMaintenance + inputs.annualRepairs;
+  return (recurringAnnual + annualFixed) * maintenanceMultiplier;
 }
 
 function withDerivedLoanValues(inputs: CalculatorInputs): CalculatorInputs {
@@ -163,24 +275,41 @@ function runLoanSimulation(rawInputs: CalculatorInputs, useExtras: boolean): Sce
   };
 }
 
-export function generateAnnualProjection(rawInputs: CalculatorInputs): AnnualProjection[] {
+interface ProjectionOptions {
+  rentGrowth: number;
+  appreciation: number;
+  vacancyPercent?: number;
+  maintenanceMultiplier?: number;
+  initialRentCoveragePercent?: number;
+}
+
+function generateAnnualProjectionWithAssumptions(rawInputs: CalculatorInputs, options?: ProjectionOptions): AnnualProjection[] {
   const inputs = withDerivedLoanValues(rawInputs);
   const rows: AnnualProjection[] = [];
   const base = runLoanSimulation(inputs, false);
   const withExtras = runLoanSimulation(inputs, true);
   const r = monthlyRate(inputs.annualRate);
 
+  const rentGrowth = options?.rentGrowth ?? inputs.annualRentGrowth;
+  const appreciation = options?.appreciation ?? inputs.annualAppreciation;
+  const vacancyRate = normalizeVacancyRate(inputs, options?.vacancyPercent);
+  const maintenanceMultiplier = options?.maintenanceMultiplier ?? 1;
+
   let debtBase = inputs.loanAmount;
   let debtWithExtras = inputs.loanAmount;
   let accumulatedCashFlow = 0;
 
+  const initialRentMonthly = calculateInitialRent(inputs, options?.initialRentCoveragePercent);
+
   for (let year = 1; year <= inputs.analysisHorizonYears; year += 1) {
-    const rentMonthly = inputs.initialRent * Math.pow(1 + inputs.annualRentGrowth / 100, year - 1);
+    const rentMonthly = initialRentMonthly * Math.pow(1 + rentGrowth / 100, year - 1);
+    const effectiveRentMonthly = rentMonthly * (1 - vacancyRate);
+    const ownershipCostMonthly = yearlyOwnershipCosts(inputs, maintenanceMultiplier) / 12;
     let yearlyCashFlow = 0;
 
     for (let m = 1; m <= 12; m += 1) {
       const mortgagePaymentForMonth = debtWithExtras > 0 ? inputs.monthlyMortgagePayment : 0;
-      yearlyCashFlow += rentMonthly - mortgagePaymentForMonth - inputs.monthlyExpenses;
+      yearlyCashFlow += effectiveRentMonthly - mortgagePaymentForMonth - ownershipCostMonthly;
 
       if (debtBase > 0) {
         const interestBase = debtBase * r;
@@ -199,14 +328,16 @@ export function generateAnnualProjection(rawInputs: CalculatorInputs): AnnualPro
       }
     }
 
-    const propertyValue = inputs.propertyPrice * Math.pow(1 + inputs.annualAppreciation / 100, year);
+    const propertyValue = inputs.propertyPrice * Math.pow(1 + appreciation / 100, year);
     const cashFlowMonthly = yearlyCashFlow / 12;
     accumulatedCashFlow += yearlyCashFlow;
 
     rows.push({
       year,
       rentMonthly,
+      effectiveRentMonthly,
       cashFlowMonthly,
+      ownershipCostMonthly,
       remainingDebtBase: debtBase,
       remainingDebtWithExtras: debtWithExtras,
       propertyValue,
@@ -219,8 +350,10 @@ export function generateAnnualProjection(rawInputs: CalculatorInputs): AnnualPro
   if (!rows.length) {
     rows.push({
       year: 0,
-      rentMonthly: inputs.initialRent,
-      cashFlowMonthly: inputs.initialRent - inputs.monthlyMortgagePayment - inputs.monthlyExpenses,
+      rentMonthly: initialRentMonthly,
+      effectiveRentMonthly: initialRentMonthly * (1 - vacancyRate),
+      cashFlowMonthly: initialRentMonthly - inputs.monthlyMortgagePayment - inputs.monthlyExpenses,
+      ownershipCostMonthly: yearlyOwnershipCosts(inputs) / 12,
       remainingDebtBase: base.remainingDebtAtHorizon,
       remainingDebtWithExtras: withExtras.remainingDebtAtHorizon,
       propertyValue: inputs.propertyPrice,
@@ -233,17 +366,52 @@ export function generateAnnualProjection(rawInputs: CalculatorInputs): AnnualPro
   return rows;
 }
 
+export function generateAnnualProjection(rawInputs: CalculatorInputs): AnnualProjection[] {
+  return generateAnnualProjectionWithAssumptions(rawInputs);
+}
+
+function scenarioSummary(rawInputs: CalculatorInputs, name: ScenarioName): ScenarioKpiSummary {
+  const scenario = rawInputs.scenarios[name];
+  const rows = generateAnnualProjectionWithAssumptions(rawInputs, {
+    rentGrowth: scenario.annualRentGrowth,
+    appreciation: scenario.annualAppreciation,
+    vacancyPercent: scenario.vacancyRatePercent,
+    maintenanceMultiplier: scenario.maintenanceMultiplier,
+    initialRentCoveragePercent: scenario.initialRentCoveragePercent
+  });
+
+  const first = rows[0];
+  const last = rows[rows.length - 1];
+  const breakEvenYear = rows.find((row) => row.cashFlowMonthly >= 0)?.year ?? null;
+
+  return {
+    name,
+    initialCoverageRatio: first.effectiveRentMonthly / Math.max(rawInputs.monthlyMortgagePayment, 1),
+    adjustedMonthlyCashFlowAtHorizon: last.cashFlowMonthly,
+    breakEvenYear,
+    projectedNetWorth: last.netWorthWithExtras,
+    holdingCostTotal: rows.reduce((acc, row) => acc + row.ownershipCostMonthly * 12, 0),
+    sustainedByRent: first.cashFlowMonthly >= 0
+  };
+}
+
 export function calculateInvestment(rawInputs: CalculatorInputs): CalculationResult {
   const inputs = withDerivedLoanValues(rawInputs);
   const base = runLoanSimulation(inputs, false);
   const withExtras = runLoanSimulation(inputs, true);
   const annualRows = generateAnnualProjection(inputs);
   const horizonRow = annualRows[annualRows.length - 1];
+  const firstRow = annualRows[0];
 
-  const initialMonthlyCashFlow = inputs.initialRent - inputs.monthlyMortgagePayment - inputs.monthlyExpenses;
+  const initialMonthlyCashFlow = firstRow.cashFlowMonthly;
   const cashFlowAccumulated = horizonRow.totalCashFlowAccumulated;
   const interestSavings = base.totalInterestPaid - withExtras.totalInterestPaid;
   const totalBenefitEstimated = cashFlowAccumulated;
+  const breakEvenYear = annualRows.find((row) => row.cashFlowMonthly >= 0)?.year ?? null;
+  const totalHoldingCost = annualRows.reduce((acc, row) => acc + row.ownershipCostMonthly * 12, 0);
+
+  const scenarioNames: ScenarioName[] = ['conservador', 'base', 'optimista'];
+  const scenarioSummaries: ScenarioKpiSummary[] = scenarioNames.map((name) => scenarioSummary(inputs, name));
 
   return {
     initialMonthlyCashFlow,
@@ -253,7 +421,17 @@ export function calculateInvestment(rawInputs: CalculatorInputs): CalculationRes
     netWorthProjected: horizonRow.netWorthWithExtras,
     totalBenefitEstimated,
     interestSavings,
-    reducedTermMonths: Math.max(base.payoffMonths - withExtras.payoffMonths, 0)
+    reducedTermMonths: Math.max(base.payoffMonths - withExtras.payoffMonths, 0),
+    rentToMortgageCoverage: firstRow.effectiveRentMonthly / Math.max(inputs.monthlyMortgagePayment, 1),
+    flowAdjustedForVacancy: firstRow.cashFlowMonthly,
+    totalHoldingCost,
+    breakEvenYear,
+    remainingDebtAtHorizon: withExtras.remainingDebtAtHorizon,
+    totalInterestPaidWithExtras: withExtras.totalInterestPaid,
+    savingsFromExtraPayments: interestSavings,
+    estimatedAccumulatedReturn: totalBenefitEstimated + horizonRow.netWorthWithExtras - inputs.downPayment,
+    propertySelfSustained: firstRow.cashFlowMonthly >= 0,
+    scenarioSummaries
   };
 }
 
@@ -266,6 +444,8 @@ export function validateInputs(inputs: CalculatorInputs): string[] {
   if (inputs.annualRate < 0) errors.push('La tasa anual no puede ser negativa.');
   if (inputs.loanTermYears <= 0 || inputs.loanTermYears > 40) errors.push('El plazo del crédito debe estar entre 1 y 40 años.');
   if (inputs.analysisHorizonYears <= 0 || inputs.analysisHorizonYears > 40) errors.push('El horizonte de análisis debe estar entre 1 y 40 años.');
+  if (inputs.vacancyMonthsPerYear < 0 || inputs.vacancyMonthsPerYear > 12) errors.push('La vacancia en meses debe estar entre 0 y 12.');
+  if (inputs.vacancyRatePercent < 0 || inputs.vacancyRatePercent > 100) errors.push('La vacancia en porcentaje debe estar entre 0% y 100%.');
 
   return errors;
 }
